@@ -1,0 +1,605 @@
+---
+title: "ARCH/GARCH"
+author: "王夏乙"
+date: "November 25, 2015"
+output:
+  rmdformats::readthedown:
+    highlight: pygments
+---
+
+<style type="text/css">
+p{ /* Normal  */
+   font-size: 18px;
+}
+body{ /* Normal  */
+   font-size: 18px;
+}
+td {  /* Table  */
+   font-size: 14px;
+}
+h1 { /* Header 1 */
+ font-size: 32px;
+}
+h2 { /* Header 2 */
+ font-size: 26px;
+}
+h3 { /* Header 3 */
+ font-size: 22px;
+}
+code.r{ /* Code block */
+  font-size: 14px;
+}
+pre { /* Code block */
+  font-size: 14px
+}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(dplyr)
+library(forecast)
+```
+
+
+## 1.异方差问题
+如果随机误差序列的方差会随着时间的变化而变化，这种情况被称为异方差。
+
+$$Var(\epsilon_t)=h(t)$$
+
+**异方差的影响:**
+
+异方差虽然不会影响回归系数最小二乘估计的无偏性，但会影响回归系数估计的标准差和置信区间。
+忽视异方差的存在会导致残差的方差会被严重低估,使得参数的显著性检验失去意义，最终导致模型的拟合精度受影响。
+
+- 异方差的直观判断
+  
+  - 残差图（方差齐性残差图，递增型残差图）
+  
+  - 残差平方图：残差序列的方差实际上是它平方的期望                         ，所以考察残差序列是 否满足方差齐性，主要考察平方序列是否平稳。
+
+- 已知异方差形式：使用方差齐性变换
+对于标准差与均值成正比关系的异方差序列，对数变换可以有效地实现方差齐性。
+**图示出现异方差现象，先尝试log看是否能够解决。**
+
+- 未知异方差形式:建立异方差模型。
+
+## 2. ARCH模型
+## 2.1 ARCH模型的思想
+
+基本思想是在以前信息集下，在某一时刻一个噪声的发生是服从正态分布。该正态分布的均值为零，方差为一个随着时间变化而改变的量，即为条件异方差，并且这个随时间变化的方差是过去有限项噪声值平方的线性组合。这样就构成了自回归条件异方差模型。
+
+## 2.2 ARCH模型的结构
+
+$$ 
+ARCH(q)\left\{
+\begin{aligned}
+x & = \beta^T(1,x_{t-1},x_{t-2},...)+\epsilon_t \\
+\epsilon_t & = \sqrt{h_t}e_t, e_t \sim N(0,1) \\
+h_t & = a_0+a_1\epsilon_{t-1}^2+...+a_q\epsilon_{t-q}^2
+\end{aligned}
+\right.
+$$
+应当满足两个约束条件
+
+$$ 
+\left\{
+\begin{aligned}
+a_0>0,\\
+0 <= a_i <1,i =1,2,...,q \\
+\sum_{i=1}^qa_i<1
+\end{aligned}
+\right.
+$$
+
+- 条件一：方差必须非负，即$Var(\epsilon_t|\epsilon_{t-1},\epsilon_{t-2},...)>=0$
+则$a_0+a_1\epsilon_{t-1}^2+...+a_q\epsilon_{t-q}^2 >=0$故每个参数要求非负。
+- 条件二：方差平稳
+
+
+## 2.3 ARCH模型的优缺点
+
+- 优点
+突破了传统时间序列模型中同方差的假设;将条件方差表达成过去干扰项的回归函数， 能够反映集聚效应;序列存在ARCH效应的时候，直接使用OLS估计会产生偏差，使用
+模型能够一定程度上避免此偏差，提高参数的估计精度。 
+
+- 缺点
+在实际应用中为了得到更好的结果，ARCH模型的阶数往往很大，参数过多，估计困 难;条件方法假设为线性函数，在现实中线性情况可能只是特例。
+
+
+## 3.GARCH模型
+
+### 3.1 模型的思想
+
+将条件方差本身的滞后值加入$h_t$。即ARCH模型实际上就是$\epsilon_t^2,\epsilon_{t-1}^2,...,\epsilon_{t-q}^2$的q阶移动平均的MA(q)模型。而GARCH模型实际上就是$h_t$
+关于$h_{t-1},...,h_{t-p}$的p阶自相关，关于$\epsilon_t^2,\epsilon_{t-1}^2,...,\epsilon_{t-q}^2$的q阶移动平均的ARMA(p,q)模型。
+
+### 3.2 模型结构：
+
+$$ 
+GARCH\left\{
+\begin{aligned}
+x_t & = f(t,x_{t-1},x_{t-2},...)+\epsilon_t \\
+\epsilon_t & = \sqrt{h_t}e_t, e_t \sim N(0,1) \\
+h_t & = a_0+\sum_{j=1}^p\eta_jh_{t-j}+\sum_{i=1}^q\lambda_i\epsilon_{t-i}^2
+\end{aligned}
+\right.
+$$
+参数满足下面的约束条件：
+$$ 
+\left\{
+\begin{aligned}
+0<= \lambda_i<1, i=1,2,...,q\\
+0 <= \eta_j <1,j =1,2,...,q \\
+0 <= \sum_{j=1}^p\eta_j+\sum_{j=1}^q\lambda_j<1
+\end{aligned}
+\right.
+$$
+注：
+（1）$e_t$为原序列提取确定信息和条件异方差信息之后的残差波动，所以$e_t$应该是真正的
+白噪声序列。$e_t$还有一个重要的作用，就是根据$e_t$的特征确定序列的分布类型。通常
+假定$e_t$服从正态分布，如果对$e_t$的分布检验显示，残差序列显著拒绝正态分布假定，就需要
+根据$e_t$的分布特征尝试其他分布。
+
+一个完整的条件异方差模型由：均值模型，条件异方差模型和分布假定三块组成。
+
+
+## 4.建模流程
+同时关注序列信息和序列波动，首先提取序列的均值信息，然后分析残差序列中蕴含的
+波动信息
+
+- 图示法
+
+观察适合何种模型建模，是否具有异方差性的可能。
+
+- 线性时序建模（ARIMA, 回归拟合+残差自相关）
+
+构建水平模型$x_t= f(t,x_{t-1},x_{t-2},...)+\epsilon_t$                       ,提取序列均值中蕴涵的相关信息.
+常用ARIMA模型。建模前需要先对序列的平稳性进行检验，PP检验适用于异方差场合，故怀疑异方差的场合要重视PP检验。
+
+建立水平模型后，检验模型残差是否通过白噪声检验，若通过，查看模型残差平方是否通过白噪声检验，若不通过，说明有异方差性，考虑继续建立ARCH/GARCH； 若一开始的残差就不通过白噪声检验，改进线性模型。
+
+- 异方差自相关检验（LM test)
+- 模型定阶
+   - ARCH: 看acf,pacf
+   - GARCH: 通常尝试(1,1),(1,2),(2,1),(2,2)
+- 参数估计
+- 模型检验
+   - 参数显著性检验:GARCH模型拟合完成后，首先对参数是否显著大于零进行检验，参 数显著性检验和ARMA模型相同，构建T分布统计量，在给定显著性水平下，拒绝原假 设表明该参数显著非零。
+   - 模型显著性检验：条件异方差模型拟合的效果取决于它是否将残差序列中蕴涵的异方差
+  信息充分提取出来。利用拟合模型估计出来的异方差 ，对残差序列和残差平方序列分
+  别进行标准化变换，
+   
+   - 分布检验:$e_t$序列的正态性检验
+   在构造GARCH模型的时候，如果不特殊指定，通常默认该序列服从正态分布。故此检 验的内容之一就是检验这个分布假定是否正确。
+   
+- 模型预测
+   
+   
+## 4.案例1973-2009Intel公司股票的对数收益率。
+
+### step1.时序图
+
+0均值，无季节，趋势，所以直接拟合残差即可。
+```{r}
+library(readr)
+library(xts)
+d.intel <- read_table2(
+  "~/Downloads/ftsdata/m-intcsp7309.txt",
+  col_types=cols(
+    .default=col_double(),
+    date=col_date("%Y%m%d")
+  ))
+xts.intel <- xts(
+  log(1 + d.intel[["intc"]]), d.intel[["date"]]
+)
+tclass(xts.intel) <- "yearmon"
+ts.intel <- ts(c(coredata(xts.intel)), start=c(1973,1), frequency=12)
+at <- ts.intel - mean(ts.intel)
+ts.plot(at)
+acf(at) # 可以认为是白噪声
+```
+序列的均值模型是常数均值，减去均值后的残差的平方的ACF:
+
+### 2.ARCH效应检验
+
+- Ljung-Box白噪声检验
+
+对$a_t$,$a_t^2$做白噪声检验
+```{r}
+Box.test(at,lag=12,type='Ljung') #通过白噪声检验，说明线性模型拟合OK
+Box.test(at^2,lag=12,type='Ljung') #不通过白噪声检验
+```
+
+
+- 统计检验方法
+
+  - Portmantea Q检验
+
+  - Engle拉格朗日乘子法检验(LM检验)
+```{r}
+"archTest" <- function(x, m=10){
+  # Perform Lagrange Multiplier Test for ARCH effect of a time series
+  # x: time series, residual of mean equation
+  # m: selected AR order
+  y <- (x - mean(x))^2
+  T <- length(x)
+  atsq <- y[(m+1):T]
+  xmat <- matrix(0, T-m, m)
+  for (j in 1:m){
+    xmat[,j] <- y[(m+1-j):(T-j)]
+  }
+  lmres <- lm(atsq ~ xmat)
+  summary(lmres)
+}
+archTest(at,m=12)
+```
+检验的p值为 9.742e-08， 高度显著，说明有ARCH效应。
+
+### 3.模型建立
+
+ARCH模型可以用acf，pacf初步判断阶数
+```{r}
+acf(at^2,lag.max=36,main='')
+#在12处较高，另外在之后1，2，3上较突出
+#残差平方和的pacf
+pacf(at^2,lag.max=36,main="")
+```
+残差平方的PACF在滞后12处较高， 另外在滞后1到3较高。 考虑建立ARCH(3)作为波动率方程。
+
+设$r_t$为收益率，拟建立如下的均值方程和波动率方程：
+$$r_t=\mu+a_t,a_t=\epsilon_t\sigma_t, \epsilon_t i.i.d \sim N(0,1)$$
+
+$$\sigma_t^2=\alpha_0+\alpha_1a_{t-1}^2+\alpha_2a_{t-2}^2+\alpha_3a_{t-3}^2$$
+**通过构造残差平方序列的自回归模型来拟合异方差函数$\sigma_t^2$**
+
+使用fGarch包的garchFit()函数建立ARCH模型。
+```{r}
+library(fGarch)
+mod1 <- garchFit( ~ 1 + garch(3,0), data=c(ts.intel), trace=FALSE)
+#其中1表示均值方程是一个常数，
+#输出结果中mu表示均值方程的均值，omega表示alpha0,alpha1为alpha1
+summary(mod1)
+```
+得到的均值方程和波动率方程为：
+$$r_t=0.0126+a_t,a_t=\epsilon_t\sigma_t$$
+$$\sigma_t^2=0.010421+0.232889a_{t-1}^2+0.075069a_{t-2}^2+0.051994a_{t-3}^2$$
+因为结果中$\alpha_2$和$\alpha_3$的估计值是不显著的，可以拟合ARCH(1)模型为波动率方程
+```{r}
+mod2 <- garchFit( ~ 1 + garch(1,0), data=c(ts.intel), trace=FALSE)
+summary(mod2)
+```
+这个模型的aic比上个模型差一些。
+
+为了进行模型验证，可以计算标准化残差$\tilde \alpha_t = \frac{a_t}{\sigma_t}$
+计算标准化残差$\tilde \alpha_t$
+```{r}
+resi <- residuals(mod2, standardize=TRUE)
+
+#标准化残差的时序图
+plot(ts(resi, start=start(ts.intel), frequency=frequency(ts.intel)), 
+     xlab="年", ylab="标准化残差")
+#标准化残差的acf
+acf(resi, lag.max=36, main="")
+acf(resi^2, lag.max=36, main="")
+#除了在滞后11、滞后21还略高以外已经没有了低阶的波动率相关。
+pacf(resi^2, lag.max=36, main="")
+#仅在高阶的滞后11、滞后21还较高。 作为低阶模型， ARCH(1)作为波动率方程已经比较适合。
+```
+
+检验标准化残差的分布。
+```{r}
+shapiro.test(resi)  #非正态
+plot(density(resi)) #考虑t分布建模，可以比较aic
+#garchFit中更改参数cond.dist="std"
+```
+
+另：fGarch包对建模见过自带若干诊断图
+```{r}
+#plot(mod2)
+```
+
+获得拟合的均值用fitter()函数，
+```{r}
+mod2f <- fitted(mod2)
+head(mod2f)
+```
+
+用predict函数做超前若干步的预测
+```{r}
+mod2p <- predict(mod2, n.ahead=12)
+mod2p
+```
+预测包括均值的预测（显然是用$\mu$预测的）、 均值预测的标准误差、 波动率的预测（是用的值滚动计算的）。 波动率长期预测接近于ARCH模型的无条件标准差。
+
+## GARCH模型
+ARCH模型用来描述波动率能得到很好的效果， 但实际建模时可能需要较高的阶数， 比如§17.5.3的欧元汇率波动率建模用了11阶的ARCH模型。
+
+GARCH模型的定阶方法研究不多， 一般用试错法尝试较低阶的GARCH模型， 如GARCH(1,1), GARCH(2,1), GARCH(1,2)等。 许多情况下GARCH(1,1)就能解决问题。
+
+继续用上面的数据建模
+```{r}
+library(fGarch, quietly = TRUE)
+mod1 <- garchFit(~ 1 + garch(1,1), data=ts.intel, trace=FALSE)
+summary(mod1)
+```
+对标准化残差及其平方的白噪声检验都通过了。而且AIC值更好。条件分布的正太性检验仍然不通过。
+模型可以写成：
+$$r_t = 0.0113 + a_t, a_t = \sigma_t\epsilon_t, \epsilon_t i.i.d. \sim N(0,1)$$
+
+$$\sigma_t^2 = 0.00092+0.0864a_{t-1}^2+0.852\sigma_{t-1}^2$$
+
+## 如果均值非常数，需要回归拟合，使用ARMA+GARCH模型
+
+这里没有对arma后的白噪声做过多的要求，直接根据aic判断
+
+```{r eval=FALSE}
+library(quantmod)
+library(lattice)
+library(timeSeries)
+library(rugarch)
+loadSymbols("^GSPC", from="1950-01-01")
+spReturns = diff(log(Cl(GSPC)))
+spReturns[as.character(head(index(Cl(GSPC)),1))] = 0
+# Create the forecasts vector to store the predictions
+windowLength = 500
+foreLength = length(spReturns) - windowLength
+forecasts <- vector(mode="character", length=foreLength)
+
+for (d in 0:foreLength) {
+    # Obtain the S&P500 rolling window for this day
+    spReturnsOffset = spReturns[(1+d):(windowLength+d)]
+    # Fit the ARIMA model
+    final.aic <- Inf
+    final.order <- c(0,0,0)
+    for (p in 0:5) for (q in 0:5) {
+        if ( p == 0 && q == 0) {
+            next
+        }
+    #通过aic寻找最优的arma阶数
+        arimaFit = tryCatch( arima(spReturnsOffset, order=c(p, 0, q)),
+                             error=function( err ) FALSE,
+                             warning=function( err ) FALSE )
+
+        if( !is.logical( arimaFit ) ) {
+            current.aic <- AIC(arimaFit)
+            if (current.aic < final.aic) {
+                final.aic <- current.aic
+                final.order <- c(p, 0, q)
+                final.arima <- arima(spReturnsOffset, order=final.order)
+            }
+        } else {
+            next
+        }
+    }
+    #对残差拟合garch模型
+    spec = ugarchspec(
+        variance.model=list(garchOrder=c(1,1)),
+        mean.model=list(armaOrder=c(final.order[1], final.order[3]), include.mean=T),
+        distribution.model="sged"
+    )
+    fit = tryCatch(
+      ugarchfit(
+        spec, spReturnsOffset, solver = 'hybrid'
+      ), error=function(e) e, warning=function(w) w
+    )
+
+    # If the GARCH model does not converge, set the direction to "long" else
+    # choose the correct forecast direction based on the returns prediction
+    # Output the results to the screen and the forecasts vector
+    if(is(fit, "warning")) {
+      forecasts[d+1] = paste(index(spReturnsOffset[windowLength]), 1, sep=",")
+      print(paste(index(spReturnsOffset[windowLength]), 1, sep=","))
+    } else {
+      fore = ugarchforecast(fit, n.ahead=1)
+      ind = fore@forecast$seriesFor
+      forecasts[d+1] = paste(colnames(ind), ifelse(ind[1] < 0, -1, 1), sep=",")
+      print(paste(colnames(ind), ifelse(ind[1] < 0, -1, 1), sep=",")) 
+    }
+}
+
+# Output the CSV file to "forecasts.csv"
+write.csv(forecasts, file="forecasts.csv", row.names=FALSE)
+
+# Input the Python-refined CSV file
+spArimaGarch = as.xts( 
+  read.zoo(
+    file="forecasts_new.csv", format="%Y-%m-%d", header=F, sep=","
+  )
+)
+# Create the ARIMA+GARCH returns
+spIntersect = merge( spArimaGarch[,1], spReturns, all=F )
+spArimaGarchReturns = spIntersect[,1] * spIntersect[,2]
+
+# Create the backtests for ARIMA+GARCH and Buy & Hold
+spArimaGarchCurve = log( cumprod( 1 + spArimaGarchReturns ) )
+spBuyHoldCurve = log( cumprod( 1 + spIntersect[,2] ) )
+spCombinedCurve = merge( spArimaGarchCurve, spBuyHoldCurve, all=F )
+
+# Plot the equity curves
+xyplot( 
+  spCombinedCurve,
+  superpose=T,
+  col=c("darkred", "darkblue"),
+  lwd=2,
+  key=list( 
+    text=list(
+      c("ARIMA+GARCH", "Buy & Hold")
+    ),
+    lines=list(
+      lwd=2, col=c("darkred", "darkblue")
+    )
+  )
+)
+```
+
+其他：https://rpubs.com/englianhu/binary-Q1FiGJRGARCH
+
+### 第四章条件异方差作业
+
+3. 查找格力电器(000651)日收盘价，并尝试用ARCH模型对其波动率建模。
+```{r}
+da <- read.csv('~/Desktop/000651.csv',fileEncoding = "GBK")
+library(lubridate)
+ts.stock <- zoo(da[,c('收盘价')],
+                as.POSIXct(da$日期))
+plot(as.xts(ts.stock), type="l", 
+     multi.panel=TRUE, theme="white",
+     major.ticks="years",
+     grid.ticks.on = "years")
+ts.stock <- as.xts(tail(ts.stock,500))
+ts.plot(ts.stock)#上升趋势
+acf(ts.stock) 
+pacf(ts.stock) #acf拖尾，pacf皆尾
+forecast::auto.arima(ts.stock)
+#arima(1,1,2)
+model <- arima(ts.stock,order=c(5,1,3))
+model
+Box.test(model$residuals) #白噪声
+Box.test(model$residuals^2) #非白噪声
+#进一步对波动进行arch建模
+res <- model$residuals
+```
+
+
+
+ARCH模型可以用acf，pacf初步判断阶数。
+```{r}
+acf(res^2,lag.max=36,main='')
+#在12处较高，另外在之后1，2，3上较突出
+#残差平方和的pacf
+pacf(res^2,lag.max=36,main="")
+```
+使用fGarch包的garchFit()函数建立ARCH模型。
+```{r}
+library(fGarch)
+mod1 <- garchFit( ~ 1+arma(5,1,3)+ garch(2,0), data=ts.stock, trace=FALSE)
+#其中1表示均值方程是一个常数，
+#输出结果中mu表示均值方程的均值，omega表示alpha0,alpha1为alpha1
+summary(mod1)
+```
+```{r}
+resi <- residuals(mod1, standardize=TRUE)
+#标准化残差的时序图
+plot(ts(resi, start=start(ts.stock), frequency=frequency(ts.stock)), 
+     xlab="年", ylab="标准化残差")
+#标准化残差的acf
+acf(resi, lag.max=36, main="")
+acf(resi^2, lag.max=36, main="")
+pacf(resi^2, lag.max=36, main="")
+#没有了波动率相关。
+```
+
+#### 4.查找沪深300指数日数据，并尝试用ARCH模型对其波动率建模。
+
+```{r}
+da <- read.csv('~/Desktop/399300.csv',fileEncoding = "GBK")
+library(lubridate)
+ts.stock <- zoo(da[,c('收盘价')],
+                as.POSIXct(da$日期))
+plot(as.xts(ts.stock), type="l", 
+     multi.panel=TRUE, theme="white",
+     major.ticks="years",
+     grid.ticks.on = "years")
+ts.stock <- as.xts(tail(ts.stock,500))
+ts.stock %>% ggtsdisplay()
+ts.stock %>% diff() %>% ggtsdisplay()
+ts.stock %>% log() %>% ggtsdisplay()
+#上升趋势，acf拖尾，pacf截尾
+forecast::auto.arima(ts.stock)
+model <- arima(ts.stock,order=c(3,1,1))
+model
+Box.test(model$residuals) #白噪声
+Box.test(model$residuals^2) #非白噪声
+#进一步对波动进行arch建模
+res <- model$residuals
+```
+
+ARCH模型可以用acf，pacf初步判断阶数。
+```{r}
+acf(res^2,lag.max=36,main='')
+#在12处较高，另外在之后1，2，3上较突出
+#残差平方和的pacf
+pacf(res^2,lag.max=36,main="")
+```
+使用fGarch包的garchFit()函数建立ARCH模型。
+```{r}
+library(fGarch)
+mod1 <- garchFit( ~ 1+arma(3,1,1)+ garch(1,0), data=ts.stock, trace=FALSE)
+#其中1表示均值方程是一个常数，
+#输出结果中mu表示均值方程的均值，omega表示alpha0,alpha1为alpha1
+#根据系数的显著性做调整
+summary(mod1)
+```
+
+```{r}
+resi <- residuals(mod1, standardize=TRUE)
+#标准化残差的时序图
+plot(ts(resi, start=start(ts.stock), frequency=frequency(ts.stock)), 
+     xlab="年", ylab="标准化残差")
+#标准化残差的acf
+acf(resi, lag.max=36, main="")
+acf(resi^2, lag.max=36, main="")
+pacf(resi^2, lag.max=36, main="")
+#没有了波动率相关。
+```
+
+使用rugarch包进行garch，便于一起预测arma和garch
+```{r}
+library(rugarch)
+model.garch = ugarchspec(mean.model=list(armaOrder=c(3,1,1),include.mean=TRUE),
+                         variance.model=list(model='sGARCH',garchOrder=c(1,0)))
+#model Valid models (currently implemented) are “sGARCH”, “fGARCH”, “eGARCH”, “gjrGARCH”, “apARCH” and “iGARCH” and “csGARCH”.
+model.garch.fit = ugarchfit(data=ts.stock, spec=model.garch )
+model.garch.fit
+
+#alpha1
+resi <- residuals(model.garch.fit)
+checkresiduals(ts(resi)) #比较正态的
+Box.test(resi)
+Box.test(resi^2)
+```
+
+- 预测
+
+**样本外预测**
+```{r}
+ugarchforecast(model.garch.fit,n.ahead=3)
+```
+
+**样本内预测**
+```{r}
+out_of_sample <- round(length(ts.stock)/2)
+dates_out_of_sample <- tail(index(ts.stock), out_of_sample)
+
+garch_fit <- ugarchfit(spec = model.garch, data = ts.stock, out.sample = out_of_sample)
+coef(garch_fit)
+garch_fore <- ugarchforecast(garch_fit, n.ahead = 1, n.roll = out_of_sample-1)
+forecast_value <- xts(garch_fore@forecast$seriesFor[1, ], dates_out_of_sample)
+forecast_volatility <- xts(garch_fore@forecast$sigmaFor[1, ], dates_out_of_sample)
+
+# plot of ts.stock value
+plot(cbind("fitted"   = fitted(garch_fit),
+           "forecast" = forecast_value,
+           "original" = ts.stock), 
+     col = c("blue", "red", "black"), lwd = c(0.5, 0.5, 2),
+     main = "Forecast of ts.stock", legend.loc = "topleft") #拟合不错
+```
+
+```{r}
+# plot of volatility
+plot(cbind("fitted volatility"   = sigma(garch_fit),
+           "forecast volatility" = forecast_volatility,
+           "log-returns"         = log(ts.stock)), 
+     col = c("blue", "red", "black"), lwd = c(2, 2, 1),
+     main = "Forecast of volatility of synthetic log-returns", legend.loc = "topleft")
+```
+
+
+
+# R Session Information
+```{r}
+sessionInfo()
+```

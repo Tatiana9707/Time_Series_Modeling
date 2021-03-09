@@ -1,0 +1,498 @@
+---
+title: "ARFIMA"
+author: "王夏乙"
+date: "November 25, 2015"
+output:
+  rmdformats::readthedown:
+    highlight: pygments
+---
+
+<style type="text/css">
+p{ /* Normal  */
+   font-size: 18px;
+}
+body{ /* Normal  */
+   font-size: 18px;
+}
+td {  /* Table  */
+   font-size: 14px;
+}
+h1 { /* Header 1 */
+ font-size: 32px;
+}
+h2 { /* Header 2 */
+ font-size: 26px;
+}
+h3 { /* Header 3 */
+ font-size: 22px;
+}
+code.r{ /* Code block */
+  font-size: 14px;
+}
+pre { /* Code block */
+  font-size: 14px
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(lubridate)
+library(forecast)
+```
+
+Tatiana
+
+# ARFIMA模型理论
+
+AR模型、MA模型和ARMA模型是传统的时间序列模型，这些模型有一些共同的缺点：
+
+- 首先，使用这些模型进行预测的时候，常常需要达到一定的拟合优度，这样模型就存在过度参数化的问题（阶数p,q太大，导致估计的参数个数过多）。因此用这种模型进行预测会导致预测效果不好。
+
+- 其次，这些模型的自协方差系数随着时间的推移，依负指数较快下降，即$\vert \rho_k\vert\le cm^{-k},0\lt m\lt 1$.因此，通常认为过程是短期记忆过程。这样ARMA模型不能很好地刻画那些时间间隔较远的观测样本之间的长期相关关系。由于模型的这些缺陷，研究者们改进了ARMA模型，提出了ARFIMA模型。
+
+## 长记忆时间序列定义（时域、频域和谱密度）
+
+- 时域
+
+    如果时间序列${X_t}$的自相关系数为$\rho_\tau$，其中$\tau$为滞后期数，若自相关函数的绝对值满足以下条件：
+    $$
+    lim_{n\to \infty}\sum_{\tau=-n}^n\vert\rho_{\tau}\vert\to \infty
+    $$
+    则称该序列为长记忆时间序列
+
+- 频域
+
+    如果平稳时间序列$X_t$的自相关函数$\rho_{\tau}$随滞后期数$\tau$的上升而缓慢变小，即满足：
+    $$
+    \rho_{\tau}\sim c\tau^{2d-1},\tau\to \infty
+    $$
+    其中$c$为常数，$d\lt0.5$，称该序列为长记忆时间序列
+
+    - 当$d\lt0$时，$lim_{n\to \infty}\sum_{j=-n}^n\vert \rho_j\vert\lt\infty$,称为中记忆过程
+    - 当$d\in(0,0.5)$时，$lim_{n\to \infty}\sum_{j=-n}^n\vert\rho_j\vert = \infty$,称为长记忆过程
+
+- 谱密度
+
+    若时间序列的谱密度函数$f(\omega)$满足：
+
+    - $f(\omega)$随频率$\omega\to 0$而趋于无穷
+    - $f(\omega)$在除去至多有限个$\omega$的值以外的所有其他$\omega$的值上有界
+    
+    
+## 长记忆性的检验方法:计算Hurst指数的R/S方法和通过假设检验的修正的R/S检验
+
+> 以下两种方法通过求解Hurst指数的值，可以进一步通过$H = d+\frac{1}{2}$确定$\hat d$.
+
+- 1、R/S分析法（又称重标极差统计法）（使用计算Hurst指数的方法检验长记忆性）
+
+  基本思路是将时间序列$X_t$划分为A个长度为n的子区间，时间序列的长度为T,将子序列记作$D_a,a=1,2,...,A$.子序列$D_a$的元素为$x_{i,a},i,2,...,n$,均值为$\bar x_a$.计算$D_a,a=1,2,...,A$的累计离差为：
+
+$$
+    X_{k,a}=\sum_{i=1}^k(x_{i,a}-\bar x),i=1,2,...,n
+$$
+
+对于每个子序列，可以得到n个累计离差，则子序列$D_a,a=1,2,...,A$的极差$R_a$可以表示为：$R_a = max(X_{k,a})-min(X_{k,a})$
+
+重标极差表示为：$\tilde Q_n = (R/S)_n = \frac{1}{A}\sum_{a=1}^A \frac{R_a}{S_a}$
+
+其中，$R_a$和$S_a$分别为子区间a内部数据的极差和标准差。当n取不同的值，以下关系成立：$(R/S)_n = kn^H$
+
+其中H为$Hurst$指数,k为常数。
+
+故此通过两边求对数得到$ln\tilde Q_n = Hlnk$,通过回归n取不同值下产生的多组数据可以拟合出$H$的取值，由$Hurst$指数来判断时间序列的长记忆性使用下列的判别标准：
+    
+
+- 当$0\le H\lt0.5$,序列具有反持久性，被称作均值回复的分数布朗运动，即时间序列存在返回起始点的倾向趋势，$H$的值越接近零，返回起始点的可能性越大。
+- 当$H=0.5$时，序列是标准的随机游走，变量之间不是自相关的，可以认为序列只存在短记忆性，不存在长记忆性,为短程过程
+
+- 当$0.5\le H \lt 1$时，说明时间序列存在长记忆性，并且$H$值越大，长记忆性越强
+
+- 当$H=1$时，序列可以用现在预测未来，具有长记忆性
+
+- 2、修正的R/S分析法（使用构建统计量的方法进行长记忆性的检验）
+
+R/S方法在检验时间序列中的长记忆方面也表现得很好，但是学者研究发现，该方法有一些弱点，其中最重要得缺陷是，**无法准备区分短记忆性和长记忆性（对时间序列当中的短程记忆比较敏感）。当序列中只有短期记忆性或同时存在短记忆性和长记忆性的时候，R/S分析法往往会做出错误的判断**。为了克服$R/S$分析法的缺陷，提出下面修正的$R/S$方法。
+
+修正的R/S统计量：$Q_n(q) = \frac{R(n)}{\sigma_n(q)}$
+
+$$
+\hat \sigma^2_n(q) = \frac{1}{n}\sum_{j=1}^k(X_j-\bar X_n)^2+\frac{2}{n}\sum_{j=1}^n\omega_j(q)[\sum_{t=j+1}^n(X_j-\bar X_n)(X_{t-j}-\bar X_n)] \equiv \hat\gamma_0+2\sum_{j=1}^q\omega_j(q)\hat\gamma_j
+$$
+
+$$
+\omega_j(q) = 1-\frac{j}{q+1}
+$$
+
+
+由于可以计算统计量$V_n(q) = \frac{Q_n(q)}{\sqrt{n}}$:
+
+对于短程过程：V是定义在$[0,1]$上的布朗桥极差，$E(V)=\sqrt{\pi/2}\approx 1.25,std(V)=\sqrt{\pi(\pi-3)/6}\approx 0.27$
+
+对于长记忆过程，$V\to \infty$
+
+即如果时间序列只有短自相关而没有长记忆性，那么$V$的极限分布是稳定的，可以通过$V$的极限分布情况来对长记忆性进行检验。
+
+R/S分析的原假设是模型没有长记忆性。
+
+- ARFIMA模型特例：ARFIMA(0,d,0)模型及其性质
+
+
+如果对于过程ARFIMA(0,d,0),时间序列$X_t$还是下面差分方程的零均值平稳解，$d\in(-0.5,0.5)$
+$$
+(1-B)^dX_t = \epsilon_t,\epsilon\sim WN(0,\sigma^2)
+$$
+则称为分数次求和白噪声。
+
+如果$d\in(-0.5,0.5)$,则
+$$
+(1-B)^dX_t = \epsilon_t
+$$
+存在唯一的纯非确定平稳解$X_t$,且
+$$
+X_t = \sum_{k=0}^{\infty}\psi_k\epsilon_{t-k} \equiv (1-B)^{-d}\epsilon_t
+$$
+这里：
+$$
+\psi_k = \frac{\Gamma(k+d)}{\Gamma(d)\Gamma(k+1)}=\prod_{0\le j\le k}\frac{j-1+d}{j}\sim c\times k^{-1-d}
+$$
+并且有：方差函数、自相关函数、偏自相关函数：
+$$
+\gamma(0)=\frac{\sigma^2\Gamma(1-2d)}{\Gamma^2(1-d)}
+$$
+
+$$
+\rho_k = \frac{\Gamma(k+d)\Gamma(1-d)}{\Gamma(k-d)\Gamma(d)}=\prod_{0\le j\le k}\frac{j-1+d}{j}
+$$
+
+$$
+\alpha(k)=\frac{d}{k-d},k=1,2,...
+$$
+
+由$\Gamma(x)\sim\sqrt{2\pi}e^{-x+1}(x-1)^{x-0.5}$得$\rho_k\sim \frac{k^{2d-1}\Gamma(1-d)}{\Gamma(d)}$
+
+当$0\lt d\lt 0.5$时，分数次求和白噪声是长记忆过程($\rho_k\to \infty$)。
+
+- 引入滞后算子表示$ARFIMA(p,d,q)$过程及其性质
+
+$ARFIMA$过程可以写成：$\phi(B)(1-B)^dX_t = \theta(B)\epsilon_t,\epsilon\sim i.i.d WN(0,\sigma^2),d\in(-0.5,0.5)$,其中$(1-B)^d$称为分数次差分算子.从模型可知，$ARFIMA$模型同时考虑序列中的长期和短期记忆性问题，这个模型使用$p+q$个参数描述序列中的短期记忆性，利用参数$d$描述序列中的长期记忆性。
+
+性质：
+
+- 如果$X_t$是$ARFIMA(p,d,q)$过程，$d\lt0.5$,那么，$(1-B)X_t$是$ARFIMA(p,d-1,q)$过程，由于若$d\in(0,0.5)$,则$d-1\in(-1,-0.5)$,故此，算子$(1-B)$可以将长记忆过程变为中记忆过程。
+
+- 当$d\le -0.5$时，有**唯一平稳解**，但是**此解不可逆**
+
+- 当$-0.5\lt d\lt0$时，有**唯一平稳解，且可逆**，中记忆过程
+
+- 当$d=0$时，有**唯一平稳解，且可逆**，短记忆过程
+
+- 当$0\lt d\lt 0.5$时，有**唯一平稳解，且可逆**，长记忆过程
+
+- 当$d\ge0.5$时，其解非平稳
+
+- 由上可得，当$\vert d\vert \lt0.5$的时候，$ARFIMA$过程平稳可逆，进一步有以下结论：当$-0.5\lt d\lt 0.5,d\neq0$时，自相关函数为：
+  $$
+  \rho_k = c\times k^{2d-1},d\neq0
+  $$
+  自相关函数呈现双曲律递减。
+
+对于平稳可逆的$ARFIMA(p,d,q)$,可以进一步写成：$\phi(B)(1-B)^dX_t = \theta(B)\epsilon_t$,满足：
+
+1、平稳过程的充要条件是：$\phi(z)=0$的根全在单位圆外
+
+2、可逆过程的充要条件是：$\theta(z)=0$的根全在单位圆外
+
+3、$\rho_k = c\times k^{2d-1},k\to \infty,c\neq0$
+
+- $ARFIMA$过程的参数估计：均值估计，自相关系数估计和分数次$d$和系数参数的估计（见$PPT$）
+
+- $ARFIMA$模型的预测：使用建立后的模型进行预测
+
+- $ARFIMA$模型的建模过程
+
+     - 1、数据预处理并进行正态性检验，清除原始数据中的趋势和波动影响
+
+     - 2、滤除序列中的短记忆因素，为了突出序列的长记忆性，需要将短记忆因素滤除，可以通过$AR$模型来实现
+
+     - 3、分数阶差分，通过估计参数$d$的方法（如$R/S$方法）实现参数估计，并完成差分得到差分后的序列
+
+     - 4、接下来的步骤就变成一个普通的$ARMA$模型参数估计，利用第三步得到的新序列进行p，q定阶，并利用最小二乘估计或者是其他方法确定模型中的$p+q$个参数
+
+
+# ARFIMA建模
+
+## 1.判断时间序列是否长记忆
+
+### 1.1 图形检验
+
+- 由$\rho_{\tau}\sim c\tau^{2d-1},\tau\to \infty$, 长时间记忆模型的ACF的衰减速率是以负幂率**缓慢衰减**的
+
+## 1.2 重新标度极差统计量(rescaled-range)方法
+$$Q_T = R_T/S_T$$
+
+- 短期关联过程：$Q_T=O_p(T^{1/2})$
+
+- 长记忆过程： $Q_T=O_p(T^{H})$
+
+其中H=d+1/2称为Hurst指数。
+在 $ln(Q_T)$ 对 $ln(T)$ 的散点图上，短期记忆
+过程的点应分布在斜率1/2的直线附近， 长记忆过程的点对应的直线斜率大于1/2.
+回归方法得到对Hurst指数的估计(即斜率估计，d的估计为Hurst指数估计-0.5）。
+
+实际中用修正的R/S分析进行检验。
+
+计算R/S的python代码:
+```{R eval=FALSE, include=TRUE}
+import numpy as np
+import pandas as pd
+def hurst(ts):
+    ts = list(ts)
+    N = len(ts)
+    if N < 20:
+        raise ValueError("Time series is too short! input series ought to have at least 20 samples!")
+
+    max_k = int(np.floor(N/2))
+    R_S_dict = []
+    for k in range(10,max_k+1):
+        R,S = 0,0
+        # split ts into subsets
+        subset_list = [ts[i:i+k] for i in range(0,N,k)]
+        if np.mod(N,k)>0:
+            subset_list.pop()
+            #tail = subset_list.pop()
+            #subset_list[-1].extend(tail)
+        # calc mean of every subset
+        mean_list=[np.mean(x) for x in subset_list]
+        for i in range(len(subset_list)):
+            cumsum_list = pd.Series(subset_list[i]-mean_list[i]).cumsum()
+            R += max(cumsum_list)-min(cumsum_list)
+            S += np.std(subset_list[i])
+        R_S_dict.append({"R":R/len(subset_list),"S":S/len(subset_list),"n":k})
+    
+    log_R_S = []
+    log_n = []
+    print(R_S_dict)
+    for i in range(len(R_S_dict)):
+        R_S = (R_S_dict[i]["R"]+np.spacing(1)) / (R_S_dict[i]["S"]+np.spacing(1))
+        log_R_S.append(np.log(R_S))
+        log_n.append(np.log(R_S_dict[i]["n"]))
+
+    Hurst_exponent = np.polyfit(log_n,log_R_S,1)[0]
+    return Hurst_exponent
+        
+```
+
+- 计算R/S的R代码
+
+Hurst Exponent: Calculates the Hurst exponent using R/S analysis.`pracma`包中有`hurstexp`函数。
+
+```{r include=F}
+#library(pracma)
+#hurstexp(x, d = 50, display = TRUE)
+```
+
+## 2.模型形式
+
+### 2.1 ARFIMA(0,d,0)过程
+过程$\{X_t\}$被称为ARFIMA(0,d,0)过程，其中-0.5<d<0.5. 
+如果${X_t}$是下面差分方差
+$$(1-B)^dX_t = \epsilon_t, -0.5<d<0.5, {\epsilon_t}\sim WN(0,\sigma^2)$$的零均值平稳解，
+那么过程${X_t}$常称为**分数次求和白噪声**。
+
+### 2.2 模拟分数次求和白噪声
+```{r}
+library(readr)
+library(xts)
+library(forecast)
+set.seed(1234)
+sim <- fracdiff::fracdiff.sim(n=1500, d= 0.3)$series
+ts.plot(sim)
+par(mfrow=c(1,2))
+acf(sim)
+pacf(sim)
+```
+
+### 2.3 ARFIMA过程
+对于ARFIMA(p,d,q)过程,有模型形式
+$$\Phi(B)(1-B)^d(X_t-\mu)=\Theta(B)\epsilon_t$$,
+只考虑平稳且可逆的情形，即: -0.5<d<0.5
+有自相关系数$\rho_k \sim ck^{2d-1},d!=0$
+则自相关系数乘双曲律递减（(hyperbolic law)）.
+
+```{r}
+sim <- fracdiff::fracdiff.sim(n=1500, d=0.2,ar=0.7,ma=-0.5)$series
+ggtsdisplay(sim)
+```
+
+acf的确呈现双曲律递减。
+
+
+## ARFIMA建模示例
+### 1.根据acf判断是否适合建立长记忆
+```{r}
+da <- read_table2(
+  "~/Downloads/ftsdata/d-ibm3dx7008.txt",
+  col_types=cols(.default=col_double(),
+                 Date=col_date("%Y%m%d"))
+)
+xts.crspw <- xts(da[,-1], da$Date)
+vw <- abs(da$vwretd)
+ew <- abs(da$ewretd)
+rm(da)
+acf(vw, main="", lag.max=300)
+acf(ew, main="", lag.max=300)
+```
+
+这两个序列的ACF都比较小但是衰减缓慢，到之后300时仍显著不为零。 都是正相关。
+
+### 2.ARFIMA过程的参数估计
+
+- **1.均值的估计**
+
+均值$E(X_t)=\mu$的估计用样本均值$$\bar X_n = 1/n(X_1+X_2+...+X_n)$$.
+```{r}
+round(mean(vw),1)
+```
+注：样本均值不是渐进正态分布。
+
+- **2.自相关系数函数的估计**
+
+- **3.分数次 d 和系数参数的估计**
+
+用fracdiff::fracdiff()函数进行ARFIMA模型估计:
+```{r}
+#极大似然估计
+mres <- fracdiff::fracdiff(vw, nar=1, nma=1)
+summary(mres)
+```
+当0<d<0.5时，有唯一平稳解，且可逆，长记忆 过程，谱密度函数在0点奇异; 这里接近0.5，所以这里用长时间其实不是很恰当，所以最后没有通过残差白噪声。
+
+
+模型为$(1-0.1133B)(1-B)^{0.4909}X_t = \epsilon_t-0.5759\epsilon_{t-1}$
+
+或者：d的估计可以用fdGPH
+函数fracdiff::fdGPH()计算差分阶的Geweke-Porter-Hudak估计值：
+估计的差分阶为d=0.372,
+```{r}
+fracdiff::fdGPH(vw)
+```
+
+### 3.残差检验
+```{r}
+residuals <- residuals(mres)
+Box.test(residuals,lag=10,type = "Ljung")
+Box.test(residuals,lag=20,type = "Ljung")
+Box.test(residuals,lag=50,type = "Ljung")
+Box.test(residuals,lag=100,type = "Ljung")
+```
+没有通过白噪声检验。
+
+
+## 时间序列模拟
+
+- 1. 短记忆(d=0)
+```{r}
+set.seed(12)
+sim <- fracdiff::fracdiff.sim(n=2000, d=0)$series
+ggtsdisplay(sim)
+```
+
+- 2. 中记忆(-0.5 < d < 0)
+
+当时，有唯一平稳解，且可逆，中记忆过程，谱密度函数在0点等于0
+```{r}
+set.seed(12)
+sim <- fracdiff::fracdiff.sim(n=2000, d=-0.2)$series
+ggtsdisplay(sim)
+```
+
+注意：fracdiff.sim取值为[-0.5,0.5],否则会报错。
+
+- 3. d>=0.5,解非平稳，d<=-0.5,解不可逆
+
+
+
+#### 第三章练习:查找美国失业率数据，并尝试用ARFIMA模型建模。
+```{r}
+da <- read_table2("~/Downloads/ftsdata/m-unrate.txt", col_types = cols(.default = col_double()))
+xts.unrate <- xts(
+  da[["rate"]], with(da, make_date(Year, mon, dd)))
+indexClass(xts.unrate) <- "yearmon"
+ts.unrate <- ts(da[["rate"]], start=c(1948,1), frequency = 12)
+ts.dur <- diff(ts.unrate)
+#作时序图
+ts.unrate %>% autoplot()
+ts.dur %>% autoplot()
+```
+
+观察失业率的月度时间序列图发现：
+
+- 失业率有周期性变化，但周期不固定；
+- 失业率水平在数据的时间范围内可能有增长趋势；
+- 失业率上升快，下降慢。这预示着失业率序列不服从线性时间序列。尝试使用ARFIMA建模。
+
+```{r}
+ggAcf(xts.unrate,lag.max=300)
+ggPacf(xts.unrate,lag.max = 300)
+#acf和pacf中体现出其长期趋势，比较大的lag,
+#考虑用arfima建模
+```
+
+- **1.均值的估计**
+
+均值$E(X_t)=\mu$的估计用样本均值$$\bar X_n = 1/n(X_1+X_2+...+X_n)$$.
+```{r}
+round(mean(xts.unrate),1)
+```
+
+- **2.自相关系数函数的估计**
+
+- **3.分数次 d 和系数参数的估计**
+
+用fracdiff::fracdiff()函数进行ARFIMA模型估计:
+```{r}
+#极大似然估计
+xts.unrate <- xts.unrate[!is.na(xts.unrate)]
+mres <- fracdiff::fracdiff(xts.unrate[-c(1:4)], nar=3, nma=3)
+summary(mres)
+```
+d=0.076760,在0和0.5之间，当0<d<0.5时，有唯一平稳解，且可逆，是长记忆过程。
+
+模型为$(1-0.867848B-0.903783B^2+0.789111B^3)(1-B)^{0.076760}(X-5.7)=\epsilon_t-0.061286\epsilon_{t-1}+0.637042\epsilon_{t-2}-0.279579\epsilon_{t-3}$
+
+### 3.残差检验
+```{r}
+residuals <- residuals(mres,standardize=T)
+checkresiduals(residuals)
+Box.test(residuals,lag=10,type = "Ljung")#残差白噪声
+Box.test(residuals,lag=15,type = "Ljung")#残差白噪声
+Box.test(residuals,lag=20,type = "Ljung")#残差非白噪声 模型已经ok了
+Box.test(residuals^2,lag=10) #残差平方非白噪声
+```
+
+### 4.考虑GARCH建模
+```{r}
+library(fGarch)
+mod1 <- garchFit( ~ garch(1,1), data= residuals, trace=FALSE)
+mod1
+#其中1表示均值方程是一个常数，
+#输出结果中mu表示均值方程的均值，omega表示alpha0,alpha1为alpha1
+resi <- residuals(mod1, standardize=TRUE)
+checkresiduals(resi)
+#标准化残差的白噪声检验
+Box.test(resi,lag=12)
+Box.test(resi^2,lag=12)
+ggAcf(resi)
+ggPacf(resi)
+#经过garch模型以后，残差白噪声，模型ok.
+```
+
+
+# R Session Information
+```{r}
+sessionInfo()
+```

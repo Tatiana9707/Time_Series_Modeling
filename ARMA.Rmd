@@ -1,0 +1,418 @@
+---
+title: "Time Series Modeling - ARMA"
+author: "王夏乙"
+date: "November 25, 2015"
+output:
+  rmdformats::readthedown:
+    highlight: pygments
+---
+
+<style type="text/css">
+p{ /* Normal  */
+   font-size: 18px;
+}
+body{ /* Normal  */
+   font-size: 18px;
+}
+td {  /* Table  */
+   font-size: 14px;
+}
+h1 { /* Header 1 */
+ font-size: 32px;
+}
+h2 { /* Header 2 */
+ font-size: 26px;
+}
+h3 { /* Header 3 */
+ font-size: 22px;
+}
+code.r{ /* Code block */
+  font-size: 14px;
+}
+pre { /* Code block */
+  font-size: 14px
+}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(forecast)
+library(xts)
+library(readxl)
+library(readr)
+```
+
+# 自回归滑动平均模型ARMA(Autoregressive moving average model)
+
+## 线形模型时间序列基础建模步骤
+
+- 平稳性检验 
+
+> 首先对时间序列进行平稳性检验；若不平稳，需对时间序列做平稳化处理  平稳化方法:去除趋势（线性趋势，多项式趋势）;差分;变换（对于方差变化的序列，经常采用log变化去除原来的指数趋势；更一般的，可以采用BOX-COX变换)
+
+- 纯随机性检验（白噪声检验)
+
+- 建模（定阶)
+
+- 残差分析
+
+- 模型优化（剔除不显著参数）
+
+
+
+## 平稳性检验 — 单位根过程
+
+建立ARMA模型的前提是时间序列是**平稳**的。
+
+典型的非平稳时间序列是单位根(unitroot)非平稳时间序列。通常通过**单位根检验**检验时间序列是否平稳。
+
+> 注：一些其他的平稳性检验方法有逆序数检验法，游程检验法，图检验方法。
+
+### 典型的非平稳序列
+- 随机游动
+$$p_t=p_{t-1}+\epsilon_t$$
+- 带漂移的随机游动
+$$p_t=\mu+p_{t-1}+\epsilon_t$$
+- 固定趋势模型
+区别于上面两种，可以用回归/差分平稳。
+
+- ARIMA
+通过一阶差分可以平稳。
+
+
+### 单位根检验
+
+单位根检验的理论基础：如果序列是平稳的，那么该序列的**所有特征根应该在单位圆内**。
+
+#### DF检验
+
+考虑如下的基础模型
+$x_t = \phi_0+\phi_1x_{t-1}+\xi_t, \xi_t$为随机部分，且$\xi_t\sim N(0,\sigma^2)$
+
+提出假设：原假设为序列非平稳$H_0:\vert\phi_1\vert\ge1$,备择假设是序列平稳$H_1:\vert\phi_1\vert\lt1$
+
+检验统计量：
+$$DF=\frac{\hat\phi_1-1}{SE(\hat\phi_1)}$$
+$DF$检验模型有三种：
+- 无漂移项自回归模型：$x_t=\phi_1x_{t-1}+\xi_t$
+- 有漂移项自回归模型：$x_t = \phi_0+\phi_1x_{t-1}+\xi_t$
+- 带趋势回归模型：$x_t = \alpha + \beta t+\phi_1x_{t-1}+\xi_t$
+
+#### ADFTest
+
+考虑如下的基础模型：
+$$X_t = c_t+\beta X_{t-1}+\sum_{j=1}^{p-1}\phi_j\Delta X_{t-j}+e_t$$
+当$\beta=1$时，就是$\Delta X_t$的AR(p-1)模型，当$\beta<1$时，是$X_t$的AR(p)模型。
+$c_t$是非随机的趋势部分，可以取0，或常数，或a+bt这样的非随机线性趋势。
+
+检验假设:
+$H_0:\beta=1$ vs. $H_1:\beta<1$
+
+如果拒绝H0，就说明没有单位根，使用统计量$$ADF=\frac{\hat\beta-1}{SE(\hat\beta)}$$
+当ADF统计量足够小的时候拒绝H0.
+
+- fUnitRoots包的adfTest()函数可以执行单位根ADF检验。
+- tseries包的adf.test()函数也可以执行单位根ADF检验。
+
+注意，单位根DF检验和ADF检验都是在拒绝（显著）时否认有单位根， 不显著时承认有单位根。
+
+#### PP检验：
+ADF和DF检验要求随机扰动项独立同分布或者独立同正态分布，但是很多时间序列不满足这一点，故此提出$PP$检验，它限定随机序列可以具有暂时相关性和不同分布，它的原假设时间序列含有一个单位根，对于模型$x_t = \phi x_{t-1}+\xi_t$.
+提出原假设：$H_0:\phi=1$
+
+ADF检验主要适用于方差齐性的场合，它对于异方差序列的平稳性检验结果不佳。
+
+PP检验的适用于**异方差场合**的单位根检验，且PP检验的临界值和ADF检验相同,服从相应的ADF检验统计量的极限分布。
+
+#### KPSS检验
+
+KPSS检验：ADF检验和PP检验的原假设都是序列中有单位根，也就是认为序列是不平稳的，备择假设是序列是平稳的。在实证研究中，人们愿意多做差分（有单位根就需要做差分）而不愿意忽略单位根的存在，因为忽略单位根比过度差分带来的后果更为严重。其次以单位根作为原假设相对更加容易涉及检验统计量。故此以序列的平稳性为原假设的方法产生：KPSS方法。
+
+**单位根检验实例：**
+```{r}
+da <- read_table2("~/Downloads/ftsdata/q-gnp4710.txt", col_types=cols(
+  .default = col_double()))
+gnp <- ts(log(da[["VALUE"]]), 
+          start=c(1947, 1), frequency=4)
+dgnp <- diff(gnp)
+rm(da)
+plot(dgnp, xlab="year", ylab="log(GNP)")
+forecast::Acf(dgnp, main="")
+forecast::Pacf(dgnp, main="")
+#pacf截尾，acf拖尾，考虑用ar模型建模
+#用aic定阶
+ar(dgnp,method='mle')
+#AIC取9阶
+#ADF的基础模型需要一个AR阶数,取p=9。 
+#用fUnitRoots::adfTest()对GNP的对数值进行ADF单位根检验：
+library(fUnitRoots)
+#type: c: with constant(intercept)
+#     nc: no constant
+#     ct:constant and trend
+#这里gnp的均值非0，且存在trend，故type='ct'
+fUnitRoots::adfTest(gnp, lags=9, type="ct") 
+fUnitRoots::unitrootTest(gnp, lags=9, type="ct")
+#结果值较大，说明不能拒绝零假设， 即对数GNP序列有单位根。序列非平稳
+#另外两种单位根检验方法
+#tseries::pp.test(gnp)
+#tseries::kpss.test(gnp)
+#尝试人为地拟合非随机线性增长趋势，检验残差是否有单位根
+tmp.t <- c(time(gnp))
+tmp.y <- residuals( lm(c(gnp) ~ tmp.t) )
+fUnitRoots::adfTest(tmp.y, type="nc")
+#结果说明用回归去掉非随机的线性增长趋势后仍有单位根存在。
+```
+
+
+### 纯随机性检验（白噪声检验）
+
+由$Bartlett$定理可以通过构造两种统计量：
+
+$Bartlett$定理：如果一个序列是纯随机的，得到一个观察期数为$n$的观察序列$x_t,t=1,2,...,n$,那么该序列的延迟非零期的样本自相关系数将近似服从均值为零，方差为序列观察期倒数的正态分布，即：
+$$
+\hat\rho_k\sim N(0,\frac{1}{n}),\forall k\neq0
+$$
+由此提出原假设：
+
+$H_0:\rho_1=\rho_2=...=\rho_m=0$(延迟期数小于等于$m$的序列值之间相互独立)
+
+$H_1:$至少存在一个$\rho_k\neq0$
+
+混成检验：
+
+（1）$Q$统计量（适用于大样本）：
+$$
+Q_{BP}=n\sum_{k=1}^m\hat \rho_k^2\sim \chi^2(m)
+$$
+（2）$LB$统计量（适用于小样本）
+$$
+Q_{LB} = n(n+2)\sum_{k=1}^m\frac{\hat\rho_k^2}{n-k}\sim\chi^2(m)
+$$
+
+> 注: **Box.test的lag怎么取？通常可以取ln(序列长度),min(20,序列长度−1)***
+
+```{r}
+Box.test(gnp,type="Ljung-Box",lag=5)
+Box.test(gnp,type="Ljung-Box",lag=9)
+Box.test(gnp,type="Ljung-Box",lag=20)
+#gnp非白噪声，可以对其进行建模
+```
+
+## ARMA模型辨识
+不同于AR,MA, ARMA模型并非根据acf,pacf定阶。
+
+可以逐个从低阶模型尝试，p+q越小越好, 找到AIC最小的选择， 用精确最大似然或者条件最大似然方法估计参数。 对残差进行白噪声检验以验证模型是否充分。
+
+R的forecast包提供了一个auto.arima()函数，可以自动进行模型选择。auto.arima()R中的函数使用了Hyndman-Khandakar算法的一种变体（Hyndman＆Khandakar，2008），该算法结合了单位根检验，最小化AICc和MLE来获得ARIMA模型。auto.arima()为算法提供许多变体的参数。
+
+**例6.1**考虑3M公司股票从1946年2月到2008年12月的月对数收益率， 共有755个观测。
+```{r}
+d <- read_table2(
+  "~/Downloads/ftsdata/m-3m4608.txt",
+  col_types=cols(.default=col_double(),
+                 date=col_date(format="%Y%m%d")))
+mmm <- xts(log(1 + d[["rtn"]]), d$date) #计算月对数收益率
+rm(d)
+tclass(mmm) <- "yearmon"
+ts.3m <- ts(coredata(mmm), start=c(1946,2), frequency=12)
+head(ts.3m)
+```
+```{r}
+ggtsdisplay(ts.3m, main="3M Monthly Log Return")
+```
+
+ACF很接近于白噪声。PACF也比较接近于白噪声但是有比较多的超出界限的值， 尽管超出量不大。
+
+
+```{r}
+forecast::auto.arima(ts.3m, max.p = 6, max.q = 6, max.P = 1, max.Q = 1)
+```
+auto.arima()函数选择了一个季节ARMA模型。
+
+
+### 第一章作业：查找中国GDP季度数据，并尝试用ARIMA模型建模。
+
+#### SARIMA
+```{r}
+da <- read_excel('~/Desktop/应用时间序列实验课/实验课/数据/中国GDP数据.xlsx',sheet=2)
+da <- ts(da$`季度GDP(亿元)`,frequency = 4,start=c(2008,1))
+autoplot(da)
+ggseasonplot(da)
+forecast::ggsubseriesplot(da)
+ggtsdisplay(da)
+#趋势，周期
+da %>% diff(1) %>% ggtsdisplay()
+da %>% diff(lag=4) %>% diff() %>% ggtsdisplay()
+da %>% diff(lag=12) %>% diff() %>% ggtsdisplay()
+```
+
+
+自动拟合arima的阶数
+```{r}
+arima.model <- auto.arima(da,approximation = F);arima.model
+#SARIMA(p,d,q)(P,D,Q)[s]
+#S:季节周期的长度
+#D:季节差分的阶数
+```
+
+$$(1+0.4118B^4)(1-B)(1-B^4)y_t = (1-0.8613B+0.2006B^2)\epsilon_t$$
+
+```{r}
+resm <- Arima(
+  da, order=c(0,1,2), seasonal=list(order=c(1,1,0), period=4)
+); 
+summary(resm)
+#残差检验
+autoplot(resm$residuals) #非白噪声，波动聚集
+Box.test(resm$residuals,lag=12,type = 'Ljung')
+Box.test(resm$residuals,lag=24,type = 'Ljung')
+Box.test(resm$residuals^2,lag=6,type = 'Ljung') #非白噪声，进一步进行异方差建模
+
+library(fGarch)
+mod1 <- garchFit( ~ garch(1,1), data=resm$residuals, trace=FALSE)
+#其中1表示均值方程是一个常数，
+#输出结果中mu表示均值方程的均值，omega表示alpha0,alpha1为alpha1
+resi <- residuals(mod1, standardize=TRUE)
+checkresiduals(resi)
+#标准化残差的时序图
+plot(ts(resi, start=start(da), frequency=frequency(da)), 
+     xlab="年", ylab="标准化残差")
+#标准化残差的白噪声检验
+Box.test(resi,lag=12)
+Box.test(resi^2,lag=12)
+ggAcf(resi)
+ggPacf(resi)
+```
+
+- 超前多步预报
+```{r}
+tmp.y <- window(da, start=start(da), end=c(2024,4))
+resm2 <- arima(tmp.y, order=c(0,1,2), seasonal=list(order=c(1,1,0), period=4))
+#样本外预测
+resm2 %>% forecast(h=12) %>% autoplot()
+mode2 <- garchFit( ~ garch(1,1), data=resm2$residuals, trace=FALSE)
+pred1 <- predict(resm2, n.ahead=6)
+mod <- predict(mode2,n.ahead=6)
+```
+
+- 样本内静态预测（预测样本内最后6个观测）
+```{r}
+horiz=6
+dbnp.prev=predict(resm2,n.ahead=horiz)$pred
+dbnp.se=predict(resm2,n.ahead=horiz)$se
+bornesup=dbnp.prev+1.96*dbnp.se
+borneinf=dbnp.prev-1.96*dbnp.se
+library(ggplot2)
+ts.plot(da)
+lines(dbnp.prev,col="red")
+lines(bornesup,col="orange")
+lines(borneinf,col="orange")
+```
+
+- 样本内动态预测（预测一个前进一个建模）
+```{r}
+dbnp.prev.dyn=ts(start=length(da)-horiz+1,end=length(da))
+dbnp.se.dyn=ts(start=length(da)-horiz+1,end=length(da))
+for (i in (length(da)-horiz+1):length(da)){
+  
+  dbnp.mod.temp=arima(window(c(da),end=i),order=c(0,1,2),seasonal=list(order=c(1,1,0),period=4),include.mean=F)
+  dbnp.prev.dyn[i-length(da)+horiz]=predict(dbnp.mod.temp,n.ahead=1)$pred
+  dbnp.se.dyn[i-length(da)+horiz]=predict(dbnp.mod.temp, n.ahead=1)$se
+}
+par(mfrow=c(1,1))
+ts.plot(window(c(da),start=1,end=74),col="orange",main='Dynamic Prediction')
+lines(dbnp.prev.dyn,col="red")
+lines(dbnp.prev.dyn+1.96*dbnp.se.dyn,col="blue")
+lines(dbnp.prev.dyn-1.96*dbnp.se.dyn,col="blue")
+rmse=sqrt(mean((c(da)[(length(da)-horiz+1):length(da)]-dbnp.prev.dyn)**2))
+rmse
+```
+
+#### ARIMA拟合
+```{r}
+arima.model2 <- auto.arima(da,approximation = F,seasonal = F,include.mean=T);arima.model2
+#注：The parameter muis called the “drift” in the R output when d=1
+checkresiduals(arima.model2)
+Box.test(arima.model2$residuals,lag=12) #白噪声
+Box.test(arima.model2$residuals^2,lag=12) #白噪声
+```
+$$(1+0.0568B-0.0093B^2-0.0422B^3-0.8714B^4)(1-B)^1(y_t-1962t)=(1-0.7753B)e_t$$
+
+非季节的ARIMA模型可以写为：
+$$(1-\phi_1B-...-\phi_pB^p)(1-B)^dy_t=c+(1+\theta_1B+...+\theta_qB)e_t$$
+上式表达等价于:
+$$(1-\phi_1B-...-\phi_pB^p)(1-B)^d(y_t-\mu t^d/d!)=(1+\theta_1B+...+\theta_qB)e_t$$
+其中B是滞后算子，$c=\mu (1-\phi_1-...-\phi_p)$,及$\mu$是$(1-B)^dy_t$的均值。
+当d=0,且include.drift=T的时候，模型形式为：
+$$(1-\phi_1B-...-\phi_pB^p)(y_t-a-bt)=(1+\theta_1B+...+\theta_qB)e_t$$
+a:intercept;b:drift
+
+- SARIMA
+包含了季节项的滞后算子，如对于$ARIMA(1,1,1)(1,1,1)_4$模型，
+模型可以写作：
+$$(1-\phi_1B)(1-\Phi_1B^4)(1-B)(1-B^4)y_t=(1+\theta_1B)(1+\Theta_1B^4)\epsilon_t$$
+
+相关连接：https://robjhyndman.com/hyndsight/arimaconstants/
+
+### 第二章课后练习查找格力电器(000651)日收盘价和收益率数据，分别检验其平稳性。
+
+```{r}
+library(lubridate)
+library(zoo)
+library(xts)
+library(tseries)
+da <- read.csv('~/Desktop/000651.csv',fileEncoding = "GBK")
+ts.stock <- zoo(da[,c('收盘价')],
+                as.POSIXct(da$日期))
+plot(as.xts(ts.stock), type="l", 
+     multi.panel=TRUE, theme="white",
+     major.ticks="years",
+     grid.ticks.on = "years")
+ar(as.xts(ts.stock)) #10
+fUnitRoots::adfTest(as.xts(ts.stock),lags=10) # 不平稳
+kpss.test(as.xts(ts.stock)) #不平稳
+pp.test(as.xts(ts.stock)) # 平稳
+```
+
+- 简单收益率
+```{r}
+library(dplyr)
+simple.return <- function(x){
+  x <- as.vector(x)
+  c(NA, diff(x) / x[1:(length(x)-1)])
+}
+
+d.geli <- data.frame(date=da$日期,收益率=simple.return(da$收盘价))
+d.geli$收益率 <- as.numeric(d.geli$收益率)
+d.geli <- d.geli[d.geli$收益率 != Inf & !is.na(d.geli$收益率),]
+ts.plot(d.geli$收益率)
+ts.stock <- as.xts(zoo(d.geli$收益率,as.POSIXct(d.geli$date)))
+fUnitRoots::adfTest(ts.stock,lags=10) # 平稳
+kpss.test(as.xts(ts.stock)) #平稳
+pp.test(as.xts(ts.stock)) # 不平稳(异方差性)
+```
+
+- 对数收益率
+```{r}
+log.return <- function(x){
+  c(NA, diff(log(x)))
+}
+d.geli <- data.frame(date=da$日期,收益率=log.return(da$收盘价))
+d.geli$收益率 <- as.numeric(d.geli$收益率)
+summary(d.geli$收益率)
+d.geli <- d.geli[d.geli$收益率 != -Inf & !is.na(d.geli$收益率),]
+ts.plot(d.geli$收益率)
+ts.stock <- as.xts(zoo(d.geli$收益率,as.POSIXct(d.geli$date)))
+#fUnitRoots::adfTest(ts.stock,lags=10) # 平稳
+#kpss.test(as.xts(ts.stock)) #平稳
+#pp.test(as.xts(ts.stock)) # 不平稳(异方差性)
+```
+
+
+# R Session Information
+```{r}
+sessionInfo()
+```
