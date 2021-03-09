@@ -1,0 +1,346 @@
+---
+title: "协整分析&误差修正模型"
+author: "王夏乙"
+date: "November 25, 2015"
+output:
+  rmdformats::readthedown:
+    highlight: pygments
+---
+
+<style type="text/css">
+p{ /* Normal  */
+   font-size: 18px;
+}
+body{ /* Normal  */
+   font-size: 18px;
+}
+td {  /* Table  */
+   font-size: 14px;
+}
+h1 { /* Header 1 */
+ font-size: 32px;
+}
+h2 { /* Header 2 */
+ font-size: 26px;
+}
+h3 { /* Header 3 */
+ font-size: 22px;
+}
+code.r{ /* Code block */
+  font-size: 14px;
+}
+pre { /* Code block */
+  font-size: 14px
+}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(forecast)
+```
+
+
+### **单整的概念：**
+- 如果序列平稳，说明序列不存在单位根，则称序列为零阶单整序列。
+- 如果一个序列至少经过d阶差分实现平稳，说明序列存在d个单位根，则称
+原序列为d阶单整序列。
+
+### **协整关系的定义:**
+假定自变量序列$x_{1t},x_{2t},...,x_{kt}$和相应变量序列$y_t$均为
+**非平稳序列**，构造回归模型
+$$y_t = \beta_0 + \sum_{i=1}^k\beta_ix_{it}+\epsilon_t$$
+假定回归残差序列$\epsilon_t$平稳，我们称相应序列$y_t$与自变量序列之间具有协整关系。
+
+
+### 协整检验
+
+- 假设条件
+  - 原假设：多元非平稳序列之间不存在协整关系
+   $$H_0:\epsilon_t \sim I(k),k>=1$$
+  - 备择假设：多元非平稳序列之间存在协整关系
+  $$H_0:\epsilon_t \sim I(0）$$
+- 检验步骤
+  - 检验时间序列是否同阶单整，若是，进一步
+  - 建立相应序列和输入序列之间的回归模型
+  - 对回归残差序列进行平稳型检验
+  - 若平稳，还有进行伪回归检验dwtest
+  - 进一步，可以建立误差修正模型
+  
+### 误差修正模型
+协整模型度量序列之间的长期均衡关系，而ECM模型则解释序列的短期波动关系。
+
+响应序列的当期波动主要会收到三方面短期波动的影响：
+
+- 输入序列的当期波动$\Delta x_t$
+- 上一期的误差$ECM_{t-1}$
+- 纯随机波动$\epsilon_t$
+
+
+## 协整检验
+
+### 一, 协整检验——E-G检验
+1. 两变量的Engle-Granger检验
+
+为了检验两序列$Y_t$与$X_t$是否为协整，Engle和Granger于 1987年提出两步检验法，也称为E-G检验。
+
+第一步：用OLS方法估计方程$Y_t = \alpha_0 + \alpha_1X_t +\epsilon_t$
+并计算非均衡误差，得到:
+$$\hat Y_t = \hat \alpha_0 +\hat \alpha_1X_1$$
+$$\hat \epsilon_t = Y_t - \hat Y_t$$
+称为协整回归(cointegrating)或静态回归(static regression)。
+
+- 第二步，检验$\hat \epsilon_t$的单整性。如果$\hat \epsilon_t$为平稳序列 ，则认为序列$Y_t$与$X_t$存在协整关系，记为CI(1,1);
+如果$\hat \epsilon_t$为I(d)序列，则认为序列Yt与Xt存在协整 关系, 记为CI(d,d) 。
+
+
+## 伪回归
+如果$x_t$和$y_t$都是I(1)序列但是独立，回归结果也可能很显著
+```{r}
+set.seed(110)
+n <- 500
+x <- cumsum(rnorm(n))
+y <- cumsum(rnorm(n))*2
+lmr <- lm(y ~ x)
+summary(lmr)
+fUnitRoots::adfTest(residuals(lmr), lags=1, type="c")
+```
+
+结果显示回归残差有单位根。
+这样的回归称为虚假回归。 两者不应该有线性关系。
+
+## 例子
+```{r}
+library(urca, quietly = TRUE)
+data(Raotbl3)
+ts.Raotbl3 <- ts(Raotbl3[,1:3], start=c(1966,4), frequency=4)
+library(quantmod, quietly = TRUE)
+plot(as.xts(ts.Raotbl3), type="l", 
+     multi.panel=FALSE, theme="white",
+     major.ticks="years",
+     grid.ticks.on = "years")
+```
+
+做adf单位根检验：
+```{r}
+fUnitRoots::adfTest(Raotbl3$lc, lags=1, type="ct")
+fUnitRoots::adfTest(Raotbl3$li, lags=1, type="ct")
+fUnitRoots::adfTest(Raotbl3$lw, lags=1, type="ct")
+#结果不显著，说明每一个时间序列都有单位根
+#检验其一阶差分的平稳性
+fUnitRoots::adfTest(diff(Raotbl3$lc), lags=1, type="c")
+fUnitRoots::adfTest(diff(Raotbl3$li), lags=1, type="c")
+fUnitRoots::adfTest(diff(Raotbl3$lw), lags=1, type="c")
+#其一阶差分平稳，一阶单整，I(1)序列，说明可以进行协整分析
+#urca包的ur.df()函数可以检验差分的阶数，并可以对非随机趋势的类型进行检验
+#来检验消费lc与收入li是否存在协整关系。将lc对li作一元回归
+##拟合长期协整关系
+eglm1 <- lm(lc~li, data=Raotbl3);summary(eglm1)
+##误差修正模型(ECM 短期波动)
+re.lm1=resid(eglm1)
+dlc=diff(Raotbl3$lc)
+dli=diff(Raotbl3$li)
+error.term=head(re.lm1,-1)
+data.ecm=data.frame(dy=dlc,dx=dli,error.term=error.term)
+model.ecm=lm(dy~dx+error.term,data=data.ecm)
+summary(model.ecm)
+#伪回归检验
+library(lmtest)
+dwtest(model.ecm)#DW=2.4059 p=0.9762 不是伪回归 模型合理
+Box.test(model.ecm$residuals)#残差不是白噪声
+```
+结果中的模型显著性检验(F检验)不可信，因为回归模型是
+$$lc=-0.18+1.01li+e_t$$
+所以
+$$lc-1.01li = -0.18+e_t$$
+即$(lc,li)^T$的协整向量为$(1,-1.01)$。
+不考虑自由度调整问题，直接作ADF检验，但其p值是不准确的，需要使用修改后的临界值。
+```{r}
+fUnitRoots::adfTest(residuals(eglm1),lags=1,type='c')
+```
+Phillips and Ouliaris给出了利用回归残差进行协整检验的方法， 包含两种方法， **方差比方法**和**多元迹统计量**方法。 R扩展包urca的ca.po()可以用来计算Phillips-Ouliaris检验。 选项demean="constant"指定有确定性常数趋势， demean="trend"指定有确定性线性趋势， 缺省为demean="none"，没有确定性趋势（无漂移）。 选项type="Pu"指定使用方差比方法， 选项type="Pz"指定使用多元迹方法， 多元迹方法对哪个分量作为回归因变量不敏感。
+
+检验消费与收入之间的协整:
+
+```{r}
+library(urca,quietly = T)
+summary(ca.po(Raotbl3[-c(1:2),c("lc","li")],type='Pz', demean="constant"))
+```
+零假设是没有存在协整关系， 0.05水平的右侧临界值为55.2， 统计量值为39.7， 没有超过临界值， 不拒绝零假设， 认为消费与收入不存在协整关系。 这也可能是PO方法的检验功效不足的问题。
+
+Phillips Ouliaris协整检验在多元时不能用来确定多个独立的协整向量， 这需要利用VECM模型。
+
+R扩展包urca提供了多种协整检验， 除了Phillips-Ouliaris协整检验， 还可以进行Johansen的迹和最大特征值检验。
+
+R扩展包tsDyn提供了Johansen的协整检验， 并可以用AIC或BIC进行秩滞后值选择。
+
+R扩展包CommonTrend可以从协整系统中提取共同的趋势， 并绘图。
+
+R扩展包cointReg提供了协整的回归参数估计、推断功能。
+
+R扩展包vars提供了VAR、VECM、结构VAR(SVAR)等模型的估计、检验， 因果性检验和协整检验的功能。
+
+这里主要讨论从VAR模型的角度定义协整。
+
+## 多变量协整关系的检验——拓展的E-G检验
+
+多变量协整关系的检验要比双变量复杂一些，主要
+在于协整变量间可能存在多种平稳的线性组合。
+
+假设有四个I(1)变量,Z,X,Y,W，他们有如下的均衡关系:
+$$Z_t=\alpha_0+\alpha_1W_t+\alpha_2X_t+\alpha_3Y_t+\mu_t$$
+非均衡误差项$\mu_t$应该是I(0)序列：
+
+$$\mu_t=Z_0-\alpha_0-\alpha_1W_t-\alpha_2X_t-\alpha_3Y_t$$
+**检验步骤:**
+
+- 对于多变量的协整检验过程，基本与双变量情形相同，即需检验变量是否具有同阶单整性，以及是否 存在平稳的线性组合。
+- 在检验是否存在平稳的线性组合时，需通过设置一个变量为被解释变量，其他变量为解释变量，进行 OLS估计并检验残差序列是否平稳。
+- 如果不平稳，则需更换被解释变量，进行同样的OLS估计及相应的残差项检验。
+- 当所有的变量都被作为被解释变量检验之后，仍不能得到平稳的残差项序列，则认为这些变量间不存 在(d,d)阶协整。
+
+**检验残差项是否平稳的DF与ADF检验临界值 要比通常的DF与ADF检验临界值小，而且该 临界值还受到所检验的变量个数的影响。**
+
+### 课后练习：
+查找国内生产总值、居民消费总额、政府消费总额、资本形成总额、国际贸易总额等，并尝试对其建立协整模型，并尝试分析GDP的主要影响因素。
+
+
+```{r echo=FALSE}
+library(readxl)
+library(dplyr)
+library(zoo)
+library(xts)
+setwd('~/Desktop/时间序列数据')
+gdp <- read_excel('~/Desktop/时间序列数据/国内生产总值_季度.xlsx')
+gdp <- ts(gdp$国内生产总值,frequency = 4,start=c(1992,1))
+#gdp #gdp不公布月度数据，公布季度起
+
+government_outcome <- read_excel('~/Desktop/时间序列数据/财政支出_季度_十亿.xlsx')
+government_outcome <- ts(government_outcome$财政支出,start=c(1995,1),frequency = 4)
+#government_outcome 
+
+chukou <- read_excel('~/Desktop/时间序列数据/出口FOB_季度_百万美元.xlsx')
+chukou <- ts(chukou$`出口:FOB`,start=c(1992,1),frequency = 4)
+#chukou
+```
+
+```{r}
+#建立gdp和出口，政府支出的协整
+#首先，建立单变量协整
+gdp %>% ggtsdisplay()
+gdp %>% diff() %>% diff() %>% ggtsdisplay()
+ar(gdp %>% diff() %>% diff())
+library(urca)
+library(tseries)
+#检验是否是二阶单整
+fUnitRoots::adfTest(diff(diff(gdp)),lags=4) #二阶单整
+kpss.test(diff(diff(gdp))) #二阶单整
+pp.test(diff(diff(gdp))) #  二阶单整
+#下面检验政府支出和出口额是否同阶单整
+government_outcome %>% diff() %>% diff() %>% ggtsdisplay()
+ar(government_outcome%>% diff() %>% diff())
+fUnitRoots::adfTest(government_outcome %>% diff() %>% diff(),lags=6) #结果显著，说明二阶单整
+
+chukou %>% diff() %>% diff() %>% ggtsdisplay()
+ar(chukou%>% diff() %>% diff())
+fUnitRoots::adfTest(chukou %>% diff() %>% diff(),lags=7) #结果显著，说明二阶单整
+```
+
+二阶差分后的的时间序列通过adf.test,pp.test和kpss.test，说明三个时间序列同阶单整(I(2)),可以进一步进行格兰杰因果检验和协整检验。
+
+**格兰杰因果检验**
+
+首先，对gdp和两时序进行格兰杰因果检验。判断两者是 否存在时间上前后的因果关系。分别以各自为响应变量进行格兰杰因果检验。
+```{r}
+gdp <- window(gdp,start=c(1995,1))
+chukou <- window(chukou,start=c(1995,1))
+rf <- data.frame(diff(diff(gdp)),diff(diff(chukou)))
+rf.ts=ts(rf,frequency = 4)
+require(vars)
+lag <- VARselect(rf.ts, lag.max = 60, type="const")$selection[1] %>% as.numeric()
+library(lmtest)
+grangertest(diff(diff(gdp)) ~ diff(diff(chukou)), order = lag, data =rf.ts)
+grangertest(diff(diff(chukou)) ~ diff(diff(gdp)), order = lag, data =rf.ts)
+#gdp是引起chukou变化的格兰杰原因
+grangertest(diff(diff(gdp)) ~ diff(diff(government_outcome)), order = lag, data =rf.ts)
+grangertest(diff(diff(government_outcome)) ~ diff(diff(gdp)), order = lag, data =rf.ts)
+#gdp和政府支出互为格兰杰因果
+```
+经过格兰杰因果检验之后，通过Engle-Granger检验方法建立多变量协整模型。根据时序图猜测他们存在一个长期稳定的关系。
+
+**step1:同阶单整** 上面已验证
+
+```{r}
+plot(as.xts(cbind(chukou/100,gdp/10,government_outcome)), type="l", 
+     multi.panel=FALSE, theme="white",
+     major.ticks="years",
+     grid.ticks.on = "years") #存在着较强的协整关系
+eglm1 <- lm(diff(gdp)~diff(government_outcome)+diff(chukou))
+summary(eglm1)
+```
+
+**step2:协整检验**
+
+建立响应序列与输入序列之间的回归模型，做最小二乘法回归，回归的模型如下:
+$$diff(gdp) = 67.741136+0.508927diff(government_outcome) + 0.077087diff(chukou) + \epsilon_t$$
+```{r}
+ar(eglm1$residuals)
+fUnitRoots::adfTest(eglm1$residuals,lags=4) #平稳
+kpss.test(eglm1$residuals) #平稳
+pp.test(eglm1$residuals) #平稳
+```
+之后对最小二乘回归模型的残差进行平稳性检验，残差通过ADF检验,PP检验,KPSS检验，认为残差平稳。
+
+**step3:协整检验**
+
+通过Durbin-Wartson方法，检验上述回归模型是否是伪回归，指两个没有因果关系的时 间序列之间，基于一些其他的外在因素，推断出因果关系。检验统计量DW = 2.3859，查 检验临界值DW分布表后发现，DW统计量在接收域内，不存在明显的自相关，不认为这里 是伪回归。由此，可以验证铁路客运量和民航客运量之间存在协整关系，他们之间是长期稳定的，长期均衡式为:$$diff(gdp) = 67.741136+0.508927diff(government_outcome) + 0.077087diff(chukou) + \epsilon_t$$
+
+```{r}
+dwtest(eglm1)#DW=2.3859  不是伪回归 模型合理
+```
+**step4:误差修正模型(ECM)**
+
+我们已经判断了GDP与两序列之间的格兰杰因果关系和检验了他们是 (2,2)阶协整的验证了该两变量的序列存在长期稳定的均衡关系，且通过dwtest,证明了不是伪回归。
+
+协整反应的是序列中变量之间的长期均衡关系，通过协整建立的是静态模型，而误差修 正模型的使用就是为了建立短期的动态模型来弥补长期静态模型的不足，通过误差修正模 型，可以判断出变量在短期波动中偏离其长期均衡关系的程度。
+  于是在这里我们构建误差修正模型来进一步探究gdp和两时间序列的关系，以
+上文验证的协整关系建立误差修正项，然后将误差修正项作为一个解释变量，连同其它反
+映短期波动的解释变量一起，建立短期模型，即是误差修正模型。
+
+DW = 2.1219，不是伪回归，且模型的残差是白噪声，说明该模型比较充分的提取了数据的信息。
+
+建立误差修正模型,估计结果为:
+
+```{r}
+re.lm1=resid(eglm1)
+dg=diff(diff(gdp))
+dgo=diff(diff(government_outcome))
+dc = diff(diff(chukou))
+error.term=head(re.lm1,-1)
+data.ecm=data.frame(dy=dg,dx1=dgo,dx2=dc,error.term=error.term)
+model.ecm=lm(dy~dx1+dx2+error.term,data=data.ecm)
+summary(model.ecm)
+#伪回归检验
+library(lmtest)
+dwtest(model.ecm)#DW=2.204  不是伪回归 模型合理
+Box.test(model.ecm$residuals)#残差是白噪声
+Box.test(model.ecm$residuals^2)#残差平方不是白噪声
+```
+$$\Delta diff(gdp) =3.097216+0.511979\Delta diff(governmentoutcome)+0.074040\Delta diff(chukou)-1.252815ECM_{t-1}+\epsilon_t$$
+其中误差校正项为:
+$$ECM_{t-1}=diff(gdp)-67.741136-0.508927diff(governmentoutcome) - 0.077087diff(chukou) $$
+
+误差校正系数为− 1.25，误差校正系数反映短期波动偏离长期均衡时的调整力度，误 差修正项的系数为负,符合误差修正机制,反映了上一期偏离长期均衡的数量将在下一期得到 125%的反向修正，这也符合之前证明的gdp和政府支出，出口总额之间的协整关系。
+
+综上：过去几年以内gdp和政府支出，出口总额的长期均衡关系为：
+$$diff(gdp) = 67.741136+0.508927diff(government_outcome) + 0.077087diff(chukou) + \epsilon_t$$
+
+短期波动关系为：
+$$ECM_{t-1}=diff(gdp)-67.741136-0.508927diff(governmentoutcome) - 0.077087diff(chukou) $$
+
+# R Session Information
+```{r}
+sessionInfo()
+```
