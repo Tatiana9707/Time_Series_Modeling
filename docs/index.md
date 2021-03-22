@@ -1,8 +1,6 @@
-## Welcome to GitHub Pages
+## Welcome to Tatiana's GitHub Pages
 
-You can use the [editor on GitHub](https://github.com/Tatiana9707/Xiayi.github.io/edit/gh-pages/docs/index.md) to maintain and preview the content for your website in Markdown files.
-
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+本科&研究生阶段统计相关课程内容，资料，总结。
 
 ### Markdown
 
@@ -11,9 +9,15 @@ Markdown is a lightweight and easy-to-use syntax for styling your writing. It in
 ```markdown
 Syntax highlighted code block
 
-# Header 1
-## Header 2
-### Header 3
+# 统计相关课程
+## 应用时间序列分析
+## 回归分析
+## 非参数统计
+## 因果推断
+
+# R语言高级应用
+## 高级可视化
+## 文字化
 
 - Bulleted
 - List
