@@ -8,7 +8,7 @@ Keep Coding, Keep Charming, Keep Calm.
 
 ### 统计相关课程
 #### 应用时间序列分析
-For more details see [协整分析](https://github.com/Tatiana9707/Xiayi.github.io/blob/gh-pages/docs/%E9%AB%98%E7%BA%A7GGplot%E7%BB%98%E5%88%B6.html).
+For more details see [协整分析](http://htmlpreview.github.io/?https://github.com/Tatiana9707/Xiayi.github.io/blob/gh-pages/docs/%E9%AB%98%E7%BA%A7GGplot%E7%BB%98%E5%88%B6.html).
 
 #### 回归分析
 #### 非参数统计
